@@ -1,0 +1,21 @@
+[package]
+name = "deen-proc"
+version = "0.1.0"
+description = "Library for declarative binary structure DEcoding and ENcoding"
+authors = ["Vlad Alex <vlad.al.dp@gmail.com>"]
+license = "MIT"
+readme = "../README.md"
+homepage = "https://github.com/vaffeine/deen"
+repository = "https://github.com/vaffeine/deen"
+keywords = ["parser", "serialization", "binary", "macro"]
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+deen = { version = "0.1.0", path = "../deen/" }
+
+syn = "0.15"
+quote = "0.6"
+proc-macro2 = "0.4"
