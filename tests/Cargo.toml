@@ -1,0 +1,9 @@
+[package]
+name = "tests"
+version = "0.1.0"
+authors = ["Vlad Alex <vlad.al.dp@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+deen = { version = "0.1", path = "../deen" }
+deen-proc = { version = "0.1", path = "../deen-proc" }
