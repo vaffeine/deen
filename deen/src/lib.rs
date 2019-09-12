@@ -1,6 +1,8 @@
 mod integers;
+mod optional;
 
 pub use integers::*;
+pub use optional::*;
 
 use std::{fmt, io};
 
@@ -46,13 +48,10 @@ where
         if other == self.value {
             Ok(())
         } else {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "unexpected tag - expected: {:?}, found: {:?}",
-                    self.value, other
-                ),
-            ))
+            Err(invalid_data_error(format!(
+                "unexpected tag - expected: {:?}, found: {:?}",
+                self.value, other
+            )))
         }
     }
 }
@@ -84,4 +83,8 @@ where
 
         Ok(())
     }
+}
+
+fn invalid_data_error<D: fmt::Display>(d: D) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, d.to_string())
 }

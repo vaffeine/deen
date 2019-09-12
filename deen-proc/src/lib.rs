@@ -2,21 +2,25 @@
 
 extern crate proc_macro;
 
+mod items;
+
 use proc_macro::TokenStream;
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::{
     braced, parenthesized,
     parse::{self, Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
-    token, Attribute, Expr, Ident, Token, Visibility,
+    token, Attribute, Ident, Token, Visibility,
 };
+
+use items::{Item, encode_item, decode_item};
 
 struct Deen {
     attrs: Vec<Attribute>,
     visibility: Visibility,
-    struct_name: Ident,
     parser_name: Ident,
+    struct_name: Ident,
     params: Option<Punctuated<Param, Token![,]>>,
     items: Punctuated<Item, Token![,]>,
 }
@@ -26,8 +30,6 @@ impl Parse for Deen {
         let attrs = input.call(Attribute::parse_outer)?;
         let visibility = input.parse()?;
         input.parse::<Token![struct]>()?;
-        let struct_name = input.parse()?;
-        input.parse::<Token![<-]>()?;
         let parser_name = input.parse()?;
         let params = if input.peek(token::Paren) {
             let content;
@@ -36,6 +38,8 @@ impl Parse for Deen {
         } else {
             None
         };
+        input.parse::<Token![for]>()?;
+        let struct_name = input.parse()?;
         let items = {
             let content;
             braced!(content in input);
@@ -66,82 +70,8 @@ impl Parse for Param {
     }
 }
 
-enum Item {
-    Value(Value),
-    Field(Field),
-}
-
-impl Parse for Item {
-    fn parse(input: ParseStream) -> parse::Result<Self> {
-        if input.peek2(Token![<-]) {
-            Ok(Item::Field(input.parse()?))
-        } else {
-            Ok(Item::Value(input.parse()?))
-        }
-    }
-}
-
-struct Value {
-    init: Expr,
-}
-
-impl Parse for Value {
-    fn parse(input: ParseStream) -> parse::Result<Self> {
-        let init = input.parse()?;
-        Ok(Value { init })
-    }
-}
-
-impl ToTokens for Value {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        self.init.to_tokens(tokens);
-    }
-}
-
-struct Field {
-    name: Ident,
-    ty: Ident,
-    init: Expr,
-}
-
-impl Parse for Field {
-    fn parse(input: ParseStream) -> parse::Result<Self> {
-        let name = input.parse()?;
-        input.parse::<Token![<-]>()?;
-        let ty = input.fork().parse()?;
-        let init = input.parse()?;
-
-        Ok(Field { name, ty, init })
-    }
-}
-
-fn struct_declaration(named: &Deen) -> proc_macro2::TokenStream {
-    let attrs = &named.attrs;
-    let visibility = &named.visibility;
-    let name = &named.struct_name;
-    let member_items = named
-        .items
-        .iter()
-        .filter_map(|f| match f {
-            Item::Field(field) => Some(field),
-            _ => None,
-        })
-        .map(|f| {
-            let ty = &f.ty;
-            let name = &f.name;
-            quote! {
-                #name: <#ty as Deen>::Item,
-            }
-        });
-    quote! {
-        #(#attrs)*
-        #visibility struct #name {
-            #(#member_items)*
-        }
-    }
-}
-
 fn parser_declaration(named: &Deen) -> proc_macro2::TokenStream {
+    let attrs = &named.attrs;
     let visibility = &named.visibility;
     let name = &named.parser_name;
     match &named.params {
@@ -154,6 +84,7 @@ fn parser_declaration(named: &Deen) -> proc_macro2::TokenStream {
                 }
             });
             quote! {
+                #(#attrs)*
                 #visibility struct #name {
                     #(#params)*
                 }
@@ -169,21 +100,7 @@ fn parser_declaration(named: &Deen) -> proc_macro2::TokenStream {
 
 fn encode_impl(named: &Deen) -> proc_macro2::TokenStream {
     let params = params_declaration(named);
-    let write_to = named.items.iter().map(|item| match item {
-        Item::Field(f) => {
-            let init = &f.init;
-            let name = &f.name;
-            quote! {
-                let #name = value.#name;
-                #init.encode(&#name, &mut buf)?;
-            }
-        }
-        Item::Value(c) => {
-            quote! {
-                #c.encode_value(&mut buf)?;
-            }
-        }
-    });
+    let write_to = named.items.iter().map(encode_item);
     quote! {
         fn encode(&self, value: &Self::Item, mut buf: impl io::Write) -> io::Result<()> {
             #(#params)*
@@ -195,25 +112,13 @@ fn encode_impl(named: &Deen) -> proc_macro2::TokenStream {
 
 fn decode_impl(named: &Deen) -> proc_macro2::TokenStream {
     let params = params_declaration(named);
-    let read_from = named.items.iter().map(|item| match item {
-        Item::Field(f) => {
-            let init = &f.init;
-            let name = &f.name;
-            quote! {
-                let #name = #init.decode(&mut buf)?;
-            }
-        }
-        Item::Value(c) => {
-            quote! {
-                #c.compare(&mut buf)?;
-            }
-        }
-    });
+    let read_from = named.items.iter().map(decode_item);
     let names = named
         .items
         .iter()
         .filter_map(|item| match item {
             Item::Field(f) => Some(&f.name),
+            Item::If(f) => f.name.as_ref(),
             _ => None,
         })
         .map(|n| quote! { #n, });
@@ -250,7 +155,6 @@ pub fn deen(input: TokenStream) -> TokenStream {
 
     let struct_name = &named.struct_name;
     let parser_name = &named.parser_name;
-    let struct_decl = struct_declaration(&named);
     let parser_decl = parser_declaration(&named);
     let encoder = encode_impl(&named);
     let decoder = decode_impl(&named);
@@ -258,8 +162,6 @@ pub fn deen(input: TokenStream) -> TokenStream {
         use std::io;
 
         use deen::{Deen, Value};
-
-        #struct_decl
 
         #parser_decl
 

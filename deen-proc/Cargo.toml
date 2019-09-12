@@ -16,6 +16,6 @@ proc-macro = true
 [dependencies]
 deen = { version = "0.1.0", path = "../deen/" }
 
-syn = "0.15"
+syn = { version = "0.15", features = ["full"] }
 quote = "0.6"
 proc-macro2 = "0.4"

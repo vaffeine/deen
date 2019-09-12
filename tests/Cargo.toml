@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 deen = { version = "0.1", path = "../deen" }
 deen-proc = { version = "0.1", path = "../deen-proc" }
+try-from-primitive = { version = "0.1", path = "../try-from-primitive" }
