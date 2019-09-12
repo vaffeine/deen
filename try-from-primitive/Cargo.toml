@@ -1,0 +1,13 @@
+[package]
+name = "try-from-primitive"
+version = "0.1.0"
+authors = ["Vlad Alex <vlad.al.dp@gmail.com>"]
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "0.15", features = ["full"] }
+quote = "0.6"
+proc-macro2 = "0.4"
